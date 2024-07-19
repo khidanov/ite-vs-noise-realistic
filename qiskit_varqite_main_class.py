@@ -7,13 +7,23 @@ and qiskit_aer Estimator to simulate noisy gates
 
 ITE is performed without noise using SciPyImaginaryEvolver
 
+Useful Qiskit examples
+----------------------
+1) VarQite (noiseless) and ITE:
+    https://qiskit-community.github.io/qiskit-algorithms/tutorials/11_VarQTE.html
+2) VQE with and without noise (example of setting up a noisy Qiskit Aer Estimator): \
+    https://qiskit-community.github.io/qiskit-algorithms/tutorials/03_vqe_simulation_with_noise.html
+3) Building noise models with Qiskit Aer:
+    https://qiskit.github.io/qiskit-aer/tutorials/3_building_noise_models.html
+4) Qiskit Aer Simulator method options:
+    https://qiskit.github.io/qiskit-aer/tutorials/1_aersimulator.html
+
 Packages information
-____________________
+--------------------
 qiskit version = 1.1.1
 qiskit-aer version = 0.14.2
 qiskit-algorithms version = 0.3.0
 """
-
 
 import sys
 import numpy as np
@@ -43,7 +53,7 @@ class Noisy_varqite_qiskit_tfim:
     ITE simulation is performed using method qiskit_ite
 
     Attributes
-    __________
+    ----------
     num_qubits: int
         Number of qubits in the simulated system
     """
@@ -129,8 +139,13 @@ class Noisy_varqite_qiskit_tfim:
         shots: Optional[int],
     ) -> "Estimator":
         """
-        estimator_method: "density_matrix", "statevector", ...
+        Returns estimator
 
+        Parameters
+        ----------
+        estimator_method: str
+            Method for Qiskit Aer Simulator used in the Estimator
+            Relevant options: "density_matrix", "statevector"
         """
         if estimator_type == "noiseless":
             estimator = QiskitEstimator()
