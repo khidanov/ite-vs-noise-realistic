@@ -11,11 +11,11 @@ time = float(sys.argv[3])
 if sys.argv[4] == "None":
     estimator_type = None
 else:
-    estimator_type = str(sys.argv[4])
+    estimator_type = sys.argv[4]
 if sys.argv[5] == "None":
     noise_type = None
 else:
-    noise_type = str(sys.argv[5])
+    noise_type = sys.argv[5]
 if sys.argv[6] == "None":
     p = None
 else:
@@ -27,7 +27,7 @@ else:
 if sys.argv[8] == "None":
     estimator_method = None
 else:
-    estimator_method = str(sys.argv[8])
+    estimator_method = sys.argv[8]
 
 'initializing an instance of the class'
 varqite_obj = Noisy_varqite_qiskit_tfim(num_qubits)
