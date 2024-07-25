@@ -1,48 +1,62 @@
 """
-Module to perform VarQITE and ITE simulations for the TFIM using Qiskit
+This module is used to perform VarQITE and ITE simulations for the TFIM using
+Qiskit.
 
-VarQITE can be simulated with and without noise
-VarQITE algorithm uses ImaginaryMcLachlanPrinciple as a variational principle \
-and qiskit_aer Estimator to simulate noisy gates
+VarQITE can be simulated with or without noise.
+VarQITE algorithm uses ImaginaryMcLachlanPrinciple as a variational principle
+and qiskit_aer Estimator to simulate noisy gates.
 
-ITE is performed without noise using SciPyImaginaryEvolver
+ITE is performed without noise using SciPyImaginaryEvolver.
 
-Useful Qiskit examples
-----------------------
+Useful Qiskit examples:
+-----------------------
 1) VarQite (noiseless) and ITE:
-    https://qiskit-community.github.io/qiskit-algorithms/tutorials/11_VarQTE.html
-2) VQE with and without noise (example of setting up a noisy Qiskit Aer Estimator): \
-    https://qiskit-community.github.io/qiskit-algorithms/tutorials/03_vqe_simulation_with_noise.html
+    https://qiskit-community.github.io/qiskit-algorithms/tutorials/ \
+    11_VarQTE.html
+2) VQE w/ and w/o noise (example of setting up a noisy Qiskit Aer Estimator):
+    https://qiskit-community.github.io/qiskit-algorithms/tutorials/ \
+    03_vqe_simulation_with_noise.html
 3) Building noise models with Qiskit Aer:
     https://qiskit.github.io/qiskit-aer/tutorials/3_building_noise_models.html
 4) Qiskit Aer Simulator method options:
     https://qiskit.github.io/qiskit-aer/tutorials/1_aersimulator.html
 
-Packages information
---------------------
+Packages information:
+---------------------
 qiskit version = 1.1.1
 qiskit-aer version = 0.14.2
 qiskit-algorithms version = 0.3.0
 """
 
-import sys
 import numpy as np
-from typing import Union, Optional, List, Tuple
-
+import sys
+from typing import (
+    List,
+    Optional,
+    Tuple,
+    Union
+)
 from qiskit import QuantumCircuit, transpile
-from qiskit.quantum_info import SparsePauliOp
+from qiskit.quantum_info import SparsePauliOp, Statevector
 from qiskit.circuit.library import EfficientSU2
 from qiskit.primitives import Estimator as QiskitEstimator
-from qiskit.quantum_info import Statevector
-
-from qiskit_algorithms.time_evolvers.variational import ImaginaryMcLachlanPrinciple
-from qiskit_algorithms import TimeEvolutionProblem
-from qiskit_algorithms import VarQITE
-from qiskit_algorithms import SciPyImaginaryEvolver
+from qiskit_algorithms.time_evolvers.variational import (
+    ImaginaryMcLachlanPrinciple
+)
+from qiskit_algorithms import (
+    SciPyImaginaryEvolver,
+    TimeEvolutionProblem,
+    VarQITE
+)
 from qiskit_algorithms.gradients import ReverseEstimatorGradient, ReverseQGT
-
-from qiskit_aer.noise import (NoiseModel, QuantumError, ReadoutError,
-    pauli_error, depolarizing_error, thermal_relaxation_error)
+from qiskit_aer.noise import (
+    depolarizing_error,
+    NoiseModel,
+    pauli_error,
+    QuantumError,
+    ReadoutError,
+    thermal_relaxation_error
+)
 from qiskit_aer.primitives import Estimator as AerEstimator
 
 
@@ -71,13 +85,20 @@ class Noisy_varqite_qiskit_tfim:
         """
 
         """
-        ZZ_string_array = ["I"*i+"ZZ"+"I"*(self.num_qubits-2-i)  for i in range(self.num_qubits-1)]
+        ZZ_string_array = [
+            "I"*i+"ZZ"+"I"*(self.num_qubits-2-i)
+            for i in range(self.num_qubits-1)
+        ]
         J_array = [-J for i in range(self.num_qubits-1)]
 
-        X_string_array = ["I"*i+"X"+"I"*(self.num_qubits-1-i)  for i in range(self.num_qubits)]
+        X_string_array = [
+            "I"*i+"X"+"I"*(self.num_qubits-1-i) for i in range(self.num_qubits)
+        ]
         g_array = [g for i in range(self.num_qubits)]
 
-        H = SparsePauliOp(ZZ_string_array + X_string_array, coeffs = J_array + g_array)
+        H = SparsePauliOp(
+            ZZ_string_array + X_string_array,coeffs = J_array + g_array
+        )
 
         return H
 
@@ -86,11 +107,19 @@ class Noisy_varqite_qiskit_tfim:
         g: float,
         J: float = 1.0
     ) -> List["SparsePauliOp"]:
-        ZZ_string_array = ["I"*i+"ZZ"+"I"*(self.num_qubits-2-i)  for i in range(self.num_qubits-1)]
-        Z_string_array = ["I"*i+"Z"+"I"*(self.num_qubits-1-i)  for i in range(self.num_qubits)]
+        ZZ_string_array = [
+            "I"*i+"ZZ"+"I"*(self.num_qubits-2-i)
+            for i in range(self.num_qubits-1)
+        ]
+        Z_string_array = [
+            "I"*i+"Z"+"I"*(self.num_qubits-1-i) for i in range(self.num_qubits)
+        ]
         mag_coef_array = [1/self.num_qubits for i in range(self.num_qubits)]
 
-        ZZ = SparsePauliOp(ZZ_string_array, coeffs = [1/(self.num_qubits-1) for i in range(self.num_qubits-1)])
+        ZZ = SparsePauliOp(
+            ZZ_string_array,
+            coeffs = [1/(self.num_qubits-1) for i in range(self.num_qubits-1)]
+        )
         mag = SparsePauliOp(Z_string_array, coeffs = mag_coef_array)
         mag2 =  mag.power(2).simplify()
         mag4 = mag.power(4).simplify()
@@ -121,12 +150,14 @@ class Noisy_varqite_qiskit_tfim:
                 error_gate1 = pauli_error([('X',p), ('I', 1 - p)])
                 error_gate2 = error_gate1.tensor(error_gate1)
             elif noise_type == "depolarizing":
-                error_gate1 = depolarizing_error(p, 1)   #single-qubit depolarizing error
+                error_gate1 = depolarizing_error(p, 1)
                 error_gate2 = error_gate1.tensor(error_gate1)
             else:
                 print("Error: not supported noise type")
                 sys.exit()
-            noise_model.add_all_qubit_quantum_error(error_gate1, ["u1", "u2", "u3"])
+            noise_model.add_all_qubit_quantum_error(
+                error_gate1, ["u1", "u2", "u3"]
+            )
             noise_model.add_all_qubit_quantum_error(error_gate2, ["cx"])
         return noise_model
 
@@ -180,8 +211,8 @@ class Noisy_varqite_qiskit_tfim:
         estimator_approximation: Optional[bool] = None,
         estimator_method: Optional[str] = None,
         shots: Optional[int] = None,
-        ReverseQGTFlag: bool = False,
-        ReverseEstimatorGradientFlag: bool = False
+        RevQGTFlag: bool = False,
+        RevEstGradFlag: bool = False
     ) -> "VarQTEResult":
         if estimator_type == "noiseless" and (noise_type != None or
                                               p != None or
@@ -190,19 +221,22 @@ class Noisy_varqite_qiskit_tfim:
                                               shots != None or
                                               estimator_method != None
                                              ):
-            print("Error: for a noiseless estimator noise_type, p, estimator_approximation, "
-                "estimator_method, and shots have to be None type")
+            print("Error: for a noiseless estimator noise_type, p, "
+                "estimator_approximation, estimator_method, and shots have to "
+                "be None type")
             sys.exit()
         if estimator_type == "noisy" and (noise_type == None or
                                           p == None or
                                           estimator_approximation == None or
                                           estimator_method == None
                                          ):
-            print("Error: for a noisy estimator noise_type, p, estimator_approximation, "
-                "and estimator_method have to be non-None type")
+            print("Error: for a noisy estimator noise_type, p, "
+            "estimator_approximation, and estimator_method have to be non-None "
+            "type")
             sys.exit()
         if estimator_approximation == False and shots == None:
-            print("Error: if estimator_approximation == False, then number of shots has to be int")
+            print("Error: if estimator_approximation == False, then number of "
+            "shots has to be int")
             sys.exit()
 
         self.H = self.set_tfim_H(g)
@@ -215,8 +249,8 @@ class Noisy_varqite_qiskit_tfim:
             aux_operators = self.aux_ops
         )
         var_principle = ImaginaryMcLachlanPrinciple(
-            qgt = ReverseQGT() if ReverseQGTFlag else None,
-            gradient = ReverseEstimatorGradient() if ReverseEstimatorGradientFlag else None
+            qgt = ReverseQGT() if RevQGTFlag else None,
+            gradient = ReverseEstimatorGradient() if RevEstGradFlag else None
         )
         self.noise_model = self.set_noise_model(
             noise_type,
@@ -229,7 +263,12 @@ class Noisy_varqite_qiskit_tfim:
             estimator_method,
             shots
         )
-        var_qite = VarQITE(self.ansatz, self.init_param_values, var_principle, self.estimator)
+        var_qite = VarQITE(
+            self.ansatz,
+            self.init_param_values,
+            var_principle,
+            self.estimator
+        )
         evolution_result = var_qite.evolve(evolution_problem)
 
         return evolution_result
@@ -244,7 +283,9 @@ class Noisy_varqite_qiskit_tfim:
         self.aux_ops = self.set_aux_ops(g) + [self.H]
         self.ansatz, self.init_param_values = self.set_ansatz_and_init_param()
 
-        init_state = Statevector(self.ansatz.assign_parameters(self.init_param_values))
+        init_state = Statevector(
+            self.ansatz.assign_parameters(self.init_param_values)
+        )
         evolution_problem = TimeEvolutionProblem(
             self.H,
             time,
