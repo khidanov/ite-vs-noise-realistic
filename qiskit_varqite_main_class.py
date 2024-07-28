@@ -23,6 +23,7 @@ Useful Qiskit examples:
 
 Packages information:
 ---------------------
+python >= 3.7
 qiskit version = 1.1.1
 qiskit-aer version = 0.14.2
 qiskit-algorithms version = 0.3.0
@@ -62,20 +63,35 @@ from qiskit_aer.primitives import Estimator as AerEstimator
 
 class Noisy_varqite_qiskit_tfim:
     """
-    Class for performing VarQITE and ITE simulations for the TFIM using Qiskit
-    VarQITE simulation is performed using method qiskit_varqite
-    ITE simulation is performed using method qiskit_ite
+    Class for performing VarQITE and ITE simulations for the TFIM using Qiskit.
+    VarQITE simulation is performed using method qiskit_varqite.
+    ITE simulation is performed using method qiskit_ite.
 
     Attributes
     ----------
-    num_qubits: int
-        Number of qubits in the simulated system
+    num_qubits : int
+        Number of qubits in the simulated system.
+    H : "SparsePauliOp"
+        TFIM Hamiltonain of the system in the Qiskit "SparsePauliOp" format.
+    aux_ops : List["SparsePauliOp"]
+        List of auxilary operators in the Qiskit "SparsePauliOp" format.
+        The expectation values of the auxilary operators are computed
+        throughout the VarQITE/ITE simulations.
+        H is included as one of the auxilary operators.
+    ansatz : "EfficientSU2"
+        Parameterized ansatz circuit.
+        Here ansatz circuit is given in the Qiskit "EfficientSU2" format.
+    init_param_values : dict["ParameterVectorElement", float]
+        Initial parameter values for the parameterized ansatz circuit.
+        Each key in the dictionary corresponds to an indiviudal parameter
+        (angle) and is the Qiskit "ParameterVectorElement" format.
     """
     def __init__(
         self,
         num_qubits: int
     ):
-        self.num_qubits = num_qubits
+        self._num_qubits = num_qubits
+
 
     def set_tfim_H(
         self,
@@ -83,18 +99,26 @@ class Noisy_varqite_qiskit_tfim:
         J: float = 1.0
     ) -> "SparsePauliOp":
         """
+        Generates TFIM Hamiltonian in Qiskit "SparsePauliOp" format.
 
+        Parameters
+        ----------
+        g : float
+            Transverse field value (typically in the units of J).
+        J : float
+            Interaction strength value.
         """
         ZZ_string_array = [
-            "I"*i+"ZZ"+"I"*(self.num_qubits-2-i)
-            for i in range(self.num_qubits-1)
+            "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+            for i in range(self._num_qubits-1)
         ]
-        J_array = [-J for i in range(self.num_qubits-1)]
+        J_array = [-J for i in range(self._num_qubits-1)]
 
         X_string_array = [
-            "I"*i+"X"+"I"*(self.num_qubits-1-i) for i in range(self.num_qubits)
+            "I"*i+"X"+"I"*(self._num_qubits-1-i)
+            for i in range(self._num_qubits)
         ]
-        g_array = [g for i in range(self.num_qubits)]
+        g_array = [g for i in range(self._num_qubits)]
 
         H = SparsePauliOp(
             ZZ_string_array + X_string_array,coeffs = J_array + g_array
@@ -102,23 +126,39 @@ class Noisy_varqite_qiskit_tfim:
 
         return H
 
+
     def set_aux_ops(
-        self,
-        g: float,
-        J: float = 1.0
+        self
     ) -> List["SparsePauliOp"]:
+        """
+        Generates a list of auxilary operators.
+        Auxilary operators are generated to copmute their expectation values
+        and, using the expectation values, to extract the Binder cumulant.
+        The Hamiltonian itself is not added as an auxilary operator here.
+
+        Returns
+        -------
+        List of auxilary operators, each in Qiskit "SparsePauliOp" format.
+            ZZ : "SparsePauliOp"
+                \sum_{i}Z_iZ_{i+1}/(num_qubits-1)
+            mag2 : "SparsePauliOp"
+                total magnetization density squared
+            mag4 : "SparsePauliOp"
+                total magnetization density to the 4th power
+        """
         ZZ_string_array = [
-            "I"*i+"ZZ"+"I"*(self.num_qubits-2-i)
-            for i in range(self.num_qubits-1)
+            "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+            for i in range(self._num_qubits-1)
         ]
         Z_string_array = [
-            "I"*i+"Z"+"I"*(self.num_qubits-1-i) for i in range(self.num_qubits)
+            "I"*i+"Z"+"I"*(self._num_qubits-1-i)
+            for i in range(self._num_qubits)
         ]
-        mag_coef_array = [1/self.num_qubits for i in range(self.num_qubits)]
+        mag_coef_array = [1/self._num_qubits for i in range(self._num_qubits)]
 
         ZZ = SparsePauliOp(
             ZZ_string_array,
-            coeffs = [1/(self.num_qubits-1) for i in range(self.num_qubits-1)]
+            coeffs = [1/(self._num_qubits-1) for i in range(self._num_qubits-1)]
         )
         mag = SparsePauliOp(Z_string_array, coeffs = mag_coef_array)
         mag2 =  mag.power(2).simplify()
@@ -126,15 +166,35 @@ class Noisy_varqite_qiskit_tfim:
 
         return [ZZ, mag2, mag4]
 
+
     def set_ansatz_and_init_param(
         self,
         init_param_values_const: float = np.pi / 2
     ) -> Tuple["EfficientSU2", dict["ParameterVectorElement",float]]:
-        ansatz = EfficientSU2(self.num_qubits, reps=1)
+        """
+        Generates a parameterized ansatz circuit and a dictionary of initial
+        parameter values for the ansatz circuit.
+        Here for simplicity all initial parameter values are assumed to be
+        the same.
+
+        Parameters
+        ----------
+        init_param_values_const : float
+            Initial parameter values, assumed to be the same here.
+
+        Returns
+        -------
+        ansatz : "EfficientSU2"
+            Parameterized ansatz circuit.
+        init_param_values : dict["ParameterVectorElement", float]
+            Dictionary of initial parameter values for the ansatz circuit.
+        """
+        ansatz = EfficientSU2(self._num_qubits, reps=1)
         init_param_values = {}
         for i in range(len(ansatz.parameters)):
             init_param_values[ansatz.parameters[i]] = init_param_values_const
         return ansatz, init_param_values
+
 
     def set_noise_model(
         self,
@@ -160,6 +220,7 @@ class Noisy_varqite_qiskit_tfim:
             )
             noise_model.add_all_qubit_quantum_error(error_gate2, ["cx"])
         return noise_model
+
 
     def set_estimator(
         self,
@@ -201,6 +262,7 @@ class Noisy_varqite_qiskit_tfim:
                 )
         return estimator
 
+
     def qiskit_varqite(
         self,
         g: float,
@@ -240,7 +302,7 @@ class Noisy_varqite_qiskit_tfim:
             sys.exit()
 
         self.H = self.set_tfim_H(g)
-        self.aux_ops = self.set_aux_ops(g) + [self.H]
+        self.aux_ops = self.set_aux_ops() + [self.H]
         self.ansatz, self.init_param_values = self.set_ansatz_and_init_param()
 
         evolution_problem = TimeEvolutionProblem(
@@ -273,6 +335,7 @@ class Noisy_varqite_qiskit_tfim:
 
         return evolution_result
 
+
     def qiskit_ite(
         self,
         g: float,
@@ -280,7 +343,7 @@ class Noisy_varqite_qiskit_tfim:
         time_step: float
     ) -> "TimeEvolutionResult":
         self.H = self.set_tfim_H(g)
-        self.aux_ops = self.set_aux_ops(g) + [self.H]
+        self.aux_ops = self.set_aux_ops() + [self.H]
         self.ansatz, self.init_param_values = self.set_ansatz_and_init_param()
 
         init_state = Statevector(

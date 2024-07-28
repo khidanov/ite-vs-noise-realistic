@@ -17,6 +17,7 @@ import sys
 import qiskit_varqite_main_class
 from qiskit_varqite_main_class import Noisy_varqite_qiskit_tfim
 
+
 def none_or_str(value):
     """
     Function used to assign the type None to a command line variable if the
@@ -25,6 +26,7 @@ def none_or_str(value):
     if value == 'None':
         return None
     return value
+
 
 def none_or_float(value):
     """
@@ -35,6 +37,7 @@ def none_or_float(value):
         return None
     return float(value)
 
+
 def none_or_bool(value):
     """
     Function used to assign the type None to a command line variable if the
@@ -43,6 +46,7 @@ def none_or_bool(value):
     if value == 'None':
         return None
     return bool(value)
+
 
 """
 Reading out parameters from the command line.
@@ -121,6 +125,7 @@ parser.add_argument(
     help="number of CPUs"
 )
 args = parser.parse_args()
+
 
 """
 Initializing an instance of the class.
