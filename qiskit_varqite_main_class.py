@@ -30,7 +30,6 @@ qiskit-algorithms version = 0.3.0
 """
 
 import numpy as np
-import sys
 from typing import (
     List,
     Optional,
@@ -189,7 +188,7 @@ class Noisy_varqite_qiskit_tfim:
         init_param_values : dict["ParameterVectorElement", float]
             Dictionary of initial parameter values for the ansatz circuit.
         """
-        ansatz = EfficientSU2(self._num_qubits, reps=1)
+        ansatz = EfficientSU2(self._num_qubits, reps=3)
         init_param_values = {}
         for i in range(len(ansatz.parameters)):
             init_param_values[ansatz.parameters[i]] = init_param_values_const
@@ -213,8 +212,7 @@ class Noisy_varqite_qiskit_tfim:
                 error_gate1 = depolarizing_error(p, 1)
                 error_gate2 = error_gate1.tensor(error_gate1)
             else:
-                print("Error: not supported noise type")
-                sys.exit()
+                raise ValueError("Not supported noise type")
             noise_model.add_all_qubit_quantum_error(
                 error_gate1, ["u1", "u2", "u3"]
             )
@@ -283,23 +281,20 @@ class Noisy_varqite_qiskit_tfim:
                                               shots != None or
                                               estimator_method != None
                                              ):
-            print("Error: for a noiseless estimator noise_type, p, "
+            raise ValueError("For a noiseless estimator noise_type, p, "
                 "estimator_approximation, estimator_method, and shots have to "
                 "be None type")
-            sys.exit()
         if estimator_type == "noisy" and (noise_type == None or
                                           p == None or
                                           estimator_approximation == None or
                                           estimator_method == None
                                          ):
-            print("Error: for a noisy estimator noise_type, p, "
+            raise ValueError("For a noisy estimator noise_type, p, "
             "estimator_approximation, and estimator_method have to be non-None "
             "type")
-            sys.exit()
         if estimator_approximation == False and shots == None:
-            print("Error: if estimator_approximation == False, then number of "
-            "shots has to be int")
-            sys.exit()
+            raise ValueError("If estimator_approximation == False, then the "
+            "number of shots has to be int")
 
         self.H = self.set_tfim_H(g)
         self.aux_ops = self.set_aux_ops() + [self.H]
