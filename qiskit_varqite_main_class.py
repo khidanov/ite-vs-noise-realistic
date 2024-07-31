@@ -166,33 +166,51 @@ class Noisy_varqite_qiskit_tfim:
         return [ZZ, mag2, mag4]
 
 
-    def set_ansatz_and_init_param(
-        self,
-        init_param_values_const: float = np.pi / 2
-    ) -> Tuple["EfficientSU2", dict["ParameterVectorElement",float]]:
+    def set_ansatz(
+        self
+    ) -> "EfficientSU2":
         """
-        Generates a parameterized ansatz circuit and a dictionary of initial
-        parameter values for the ansatz circuit.
-        Here for simplicity all initial parameter values are assumed to be
-        the same.
+        Generates a parameterized ansatz circuit.
 
         Parameters
         ----------
-        init_param_values_const : float
-            Initial parameter values, assumed to be the same here.
 
         Returns
         -------
         ansatz : "EfficientSU2"
             Parameterized ansatz circuit.
+        """
+        ansatz = EfficientSU2(self._num_qubits, reps=1)
+        return ansatz
+
+
+    def set_init_params(
+        self,
+        ansatz,
+        init_param_values_const: float = np.pi / 2
+    ) -> dict["ParameterVectorElement",float]:
+        """
+        Generates a dictionary of initial parameter values for the ansatz
+        circuit.
+        Here for simplicity all initial parameter values are assumed to be
+        the same.
+
+        Parameters
+        ----------
+        ansatz : "QuantumCircuit" or "EfficientSU2"
+            Parameterized ansatz circuit.
+        init_param_values_const : float
+            Initial parameter values, assumed to be the same here.
+
+        Returns
+        -------
         init_param_values : dict["ParameterVectorElement", float]
             Dictionary of initial parameter values for the ansatz circuit.
         """
-        ansatz = EfficientSU2(self._num_qubits, reps=3)
         init_param_values = {}
         for i in range(len(ansatz.parameters)):
             init_param_values[ansatz.parameters[i]] = init_param_values_const
-        return ansatz, init_param_values
+        return init_param_values
 
 
     def set_noise_model(
@@ -212,7 +230,7 @@ class Noisy_varqite_qiskit_tfim:
                 error_gate1 = depolarizing_error(p, 1)
                 error_gate2 = error_gate1.tensor(error_gate1)
             else:
-                raise ValueError("Not supported noise type")
+                raise ValueError("Not supported noise type.")
             noise_model.add_all_qubit_quantum_error(
                 error_gate1, ["u1", "u2", "u3"]
             )
@@ -281,24 +299,31 @@ class Noisy_varqite_qiskit_tfim:
                                               shots != None or
                                               estimator_method != None
                                              ):
-            raise ValueError("For a noiseless estimator noise_type, p, "
+            raise ValueError(
+                "For a noiseless estimator noise_type, p, "
                 "estimator_approximation, estimator_method, and shots have to "
-                "be None type")
+                "be None type."
+                )
         if estimator_type == "noisy" and (noise_type == None or
                                           p == None or
                                           estimator_approximation == None or
                                           estimator_method == None
                                          ):
-            raise ValueError("For a noisy estimator noise_type, p, "
-            "estimator_approximation, and estimator_method have to be non-None "
-            "type")
+            raise ValueError(
+                "For a noisy estimator noise_type, p, "
+                "estimator_approximation, and estimator_method have to be "
+                "non-None type."
+                )
         if estimator_approximation == False and shots == None:
-            raise ValueError("If estimator_approximation == False, then the "
-            "number of shots has to be int")
+            raise ValueError(
+                "If estimator_approximation == False, then the number of shots "
+                "has to be integer."
+                )
 
         self.H = self.set_tfim_H(g)
         self.aux_ops = self.set_aux_ops() + [self.H]
-        self.ansatz, self.init_param_values = self.set_ansatz_and_init_param()
+        self.ansatz = self.set_ansatz()
+        self.init_param_values = self.set_init_params(self.ansatz)
 
         evolution_problem = TimeEvolutionProblem(
             self.H,
@@ -339,7 +364,8 @@ class Noisy_varqite_qiskit_tfim:
     ) -> "TimeEvolutionResult":
         self.H = self.set_tfim_H(g)
         self.aux_ops = self.set_aux_ops() + [self.H]
-        self.ansatz, self.init_param_values = self.set_ansatz_and_init_param()
+        self.ansatz = self.set_ansatz()
+        self.init_param_values = self.set_init_params(self.ansatz)
 
         init_state = Statevector(
             self.ansatz.assign_parameters(self.init_param_values)
