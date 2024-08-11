@@ -30,6 +30,7 @@ qiskit-algorithms version = 0.3.0
 """
 
 import numpy as np
+import h5py
 from typing import (
     List,
     Optional,
@@ -37,6 +38,8 @@ from typing import (
     Union
 )
 from qiskit import QuantumCircuit, transpile
+from qiskit.circuit import Parameter
+from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.quantum_info import SparsePauliOp, Statevector
 from qiskit.circuit.library import EfficientSU2
 from qiskit.primitives import Estimator as QiskitEstimator
@@ -167,21 +170,105 @@ class Noisy_varqite_qiskit_tfim:
 
 
     def set_ansatz(
-        self
-    ) -> "EfficientSU2":
+        self,
+        ansatz_type: str = "adaptvqite",
+        EfficientSU2_reps: int = 1,
+        **kwargs
+    ) -> Union["QuantumCircuit", "EfficientSU2"]:
         """
         Generates a parameterized ansatz circuit.
 
         Parameters
         ----------
+        ansatz_type : str
+            Type of ansatz.
+            Relevant options: "adaptvqite", "EfficientSU2".
 
         Returns
         -------
-        ansatz : "EfficientSU2"
+        ansatz : Union["QuantumCircuit", "EfficientSU2"]
             Parameterized ansatz circuit.
+
         """
-        ansatz = EfficientSU2(self._num_qubits, reps=1)
+        if ansatz_type == "adaptvqite":
+            filename = "ansatz_example.h5"
+            ansatz_adaptvqite, ref_state_adaptvqite = self.read_adaptvqite_ansatz(filename)
+
+            if ref_state_adaptvqite == [1.+0.j]+[0.+0.j for i in range(len(ref_state_adaptvqite)-1)]:
+                ansatz = QuantumCircuit(self._num_qubits)
+            elif ref_state_adaptvqite == [0.+0.j for i in range(len(ref_state_adaptvqite)-1)]+[1.+0.j]:
+                ansatz = QuantumCircuit(self._num_qubits)
+                ansatz.x([i for i in range(self._num_qubits)])
+            else:
+                raise ImportError('Reference state is assumed to be either |00...0> or |11...1> here.')
+
+            for i, pauli_string_bytes in enumerate(ansatz_adaptvqite):
+
+                pauli_string = ansatz_adaptvqite[i].decode("utf-8")
+
+                theta = Parameter("theta%s" % i)
+
+                ansatz.append(self.pauli_rotation_gate(theta, pauli_string), range(self._num_qubits))
+
+        elif ansatz_type == "EfficientSU2":
+            ansatz = EfficientSU2(self._num_qubits, reps=1)
+        else:
+            raise ValueError("Not supported ansatz type type. Relevant options: 'adaptvqite', 'EfficientSU2'")
         return ansatz
+
+
+    def read_adaptvqite_ansatz(
+        self,
+        filename: str
+    ):
+        """
+        Reads the ansatz from a file resulting from adaptvqite calculation.
+
+        Parameters
+        ----------
+        filename : str
+            Name of a file containing the results of adaptvqite calculation.
+            Has to be given in .h5 format.
+
+        Returns
+        -------
+        ansatz_adaptvqite : List[bytes]
+            List of byte strings representing Pauli strings entering the ansatz.
+        ref_state_adaptvqite : List[complex128]
+            Normalized reference state.
+        """
+        if filename[-3:] != '.h5':
+            raise ImportError("Ansatz file should be given in .h5 format")
+
+        with h5py.File(filename, "r") as f:
+            ansatz_adaptvqite = list(f['ansatz_code'])
+            # ngates_adaptvqite = f['ngates'][()]
+            # params_adaptvqite = f['params'][()]
+            ref_state_adaptvqite = list(f['ref_state'])
+
+        return ansatz_adaptvqite, ref_state_adaptvqite
+
+
+    def pauli_rotation_gate(
+        self,
+        theta,
+        pauli_string: str,
+    ):
+        """
+        Generates a Pauli string rotation gate.
+
+        Parameters
+        ----------
+        theta : float or "qiskit.circuit.parameter.Parameter"
+            Pauli rotation angle.
+
+        Returns
+        -------
+        gate : Qiskit instruction
+        """
+        operator = SparsePauliOp(pauli_string)
+        gate = PauliEvolutionGate(operator, time = theta)
+        return gate
 
 
     def set_init_params(
@@ -322,7 +409,7 @@ class Noisy_varqite_qiskit_tfim:
 
         self.H = self.set_tfim_H(g)
         self.aux_ops = self.set_aux_ops() + [self.H]
-        self.ansatz = self.set_ansatz()
+        self.ansatz = self.set_ansatz(ansatz_type = "adaptvqite")
         self.init_param_values = self.set_init_params(self.ansatz)
 
         evolution_problem = TimeEvolutionProblem(
