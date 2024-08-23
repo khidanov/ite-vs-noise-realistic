@@ -12,7 +12,6 @@ generating script to run the code on computing nodes
 import argparse
 import os
 import pickle
-import sys
 
 import qiskit_varqite_main_class
 from qiskit_varqite_main_class import Noisy_varqite_qiskit_tfim
@@ -38,6 +37,16 @@ def none_or_float(value):
     return float(value)
 
 
+def none_or_int(value):
+    """
+    Function used to assign the type None to a command line variable if the
+    command line reads "None", int otherwise.
+    """
+    if value == 'None':
+        return None
+    return int(value)
+
+
 def none_or_bool(value):
     """
     Function used to assign the type None to a command line variable if the
@@ -57,72 +66,96 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "-n",
     "--num_qubits",
-    type=int,
-    default=2,
-    metavar='\b',
-    help="number of qubits"
+    type = int,
+    default = 2,
+    metavar = '\b',
+    help = "number of qubits"
 )
 parser.add_argument(
     "-g",
     "--g",
-    type=float,
-    default=0.1,
-    metavar='\b',
-    help="transverse field"
+    type = float,
+    default = 0.1,
+    metavar = '\b',
+    help = "transverse field"
+)
+parser.add_argument(
+    "-bc",
+    "--BC",
+    type = str,
+    choices = ["periodic", "open"],
+    default = "periodic",
+    metavar = '\b',
+    help = "boundary conditions"
 )
 parser.add_argument(
     "-t",
     "--time",
-    type=float,
-    default=5.0,
-    metavar='\b',
-    help="total simulation (imaginary) time"
+    type = float,
+    default = 5.0,
+    metavar = '\b',
+    help = "total simulation (imaginary) time"
+)
+parser.add_argument(
+    "--ansatz_type",
+    type = str,
+    choices = ["adaptvqite", "EfficientSU2"],
+    default = "adaptvqite",
+    metavar = '\b',
+    help = "ansatz type"
+)
+parser.add_argument(
+    "--EfficientSU2_reps",
+    type = none_or_int,
+    default = None,
+    metavar = '\b',
+    help = "Number of reps for the EfficientSU2 ansatz. None for adaptvqite."
 )
 parser.add_argument(
     "--estimator_type",
-    type=str,
-    choices=["noiseless", "noisy"],
-    default="noiseless",
-    metavar='\b',
-    help="estimator type"
+    type = str,
+    choices = ["noiseless", "noisy"],
+    default = "noiseless",
+    metavar = '\b',
+    help = "estimator type"
 )
 parser.add_argument(
     "--noise_type",
-    type=none_or_str,
-    choices=[None, "X", "depolarizing"],
-    default=None,
-    help="noise type"
+    type = none_or_str,
+    choices = [None, "X", "depolarizing"],
+    default = None,
+    help = "noise type"
 )
 parser.add_argument(
     "-p",
     "--p",
-    type=none_or_float,
-    default=None,
-    metavar='\b',
-    help="noise probability"
+    type = none_or_float,
+    default = None,
+    metavar = '\b',
+    help = "noise probability"
 )
 parser.add_argument(
     "--estimator_approximation",
-    type=none_or_bool,
-    choices=[None, True, False],
-    default=None,
-    metavar='\b',
-    help="estimator approximation flag"
+    type = none_or_bool,
+    choices = [None, True, False],
+    default = None,
+    metavar = '\b',
+    help = "estimator approximation flag"
 )
 parser.add_argument(
     "--estimator_method",
-    type=none_or_str,
-    choices=[None, "density_matrix", "statevector"],
-    default=None,
-    metavar='\b',
-    help="estimator method"
+    type = none_or_str,
+    choices = [None, "density_matrix", "statevector"],
+    default = None,
+    metavar = '\b',
+    help = "estimator method"
 )
 parser.add_argument(
     "--num_cpus",
-    type=int,
-    default=1,
-    metavar='\b',
-    help="number of CPUs"
+    type = int,
+    default = 1,
+    metavar = '\b',
+    help = "number of CPUs"
 )
 args = parser.parse_args()
 
@@ -137,7 +170,10 @@ Performing VarQITE.
 """
 evolution_result_varqite = varqite_obj.qiskit_varqite(
     args.g,
+    args.BC,
     args.time,
+    args.ansatz_type,
+    args.EfficientSU2_reps,
     args.estimator_type,
     args.noise_type,
     args.p,
@@ -151,6 +187,7 @@ Performing ITE.
 time_step=0.01
 evolution_result_ite = varqite_obj.qiskit_ite(
     args.g,
+    args.BC,
     args.time,
     time_step
 )
@@ -165,14 +202,17 @@ file_dir = os.path.dirname(os.path.abspath(__file__))
 Saving evolution_result dictionary containing desired objects to a file.
 """
 with open(file_dir +
-        '/data/qiskit_varqite_L%s_g%s_time%s_%s_noise%s_p%s_approx%s_%s.pkl' % (
-            args.num_qubits,
-            args.g,
-            args.time,
-            args.estimator_type,
-            args.noise_type,
-            args.p,
-            args.estimator_approximation,
-            args.estimator_method
-            ), 'wb') as outp:
+    '/data/qiskit_varqite_L%s_g%s_%s_time%s_%s_reps%s_%s_noise%s_p%s_approx%s_%s_test_avqite_volta.pkl' % (
+        args.num_qubits,
+        args.g,
+        args.BC,
+        args.time,
+        args.ansatz_type,
+        args.EfficientSU2_reps,
+        args.estimator_type,
+        args.noise_type,
+        args.p,
+        args.estimator_approximation,
+        args.estimator_method
+        ), 'wb') as outp:
     pickle.dump(evolution_result, outp, pickle.HIGHEST_PROTOCOL)

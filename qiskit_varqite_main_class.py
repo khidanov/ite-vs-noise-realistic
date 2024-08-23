@@ -98,6 +98,7 @@ class Noisy_varqite_qiskit_tfim:
     def set_tfim_H(
         self,
         g: float,
+        BC: str,
         J: float = 1.0
     ) -> "SparsePauliOp":
         """
@@ -107,15 +108,29 @@ class Noisy_varqite_qiskit_tfim:
         ----------
         g : float
             Transverse field value (typically in the units of J).
+        BC : periodic
+            Boundary conditions.
+            Relevant options: "periodic", "open".
         J : float
             Interaction strength value.
         """
-        ZZ_string_array = [
-            "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
-            for i in range(self._num_qubits-1)
-        ]
-        J_array = [-J for i in range(self._num_qubits-1)]
-
+        if BC == "open":
+            ZZ_string_array = [
+                "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+                for i in range(self._num_qubits-1)
+            ]
+            J_array = [-J for i in range(self._num_qubits-1)]
+        elif BC == "periodic":
+            ZZ_string_array = [
+                "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+                for i in range(self._num_qubits-1)
+            ] + ["Z"+"I"*(self._num_qubits-2)+"Z"]
+            J_array = [-J for i in range(self._num_qubits)]
+        else:
+            raise ValueError(
+                "Not supported boundary conditions. "
+                "Possible options: 'periodic', 'open'."
+            )
         X_string_array = [
             "I"*i+"X"+"I"*(self._num_qubits-1-i)
             for i in range(self._num_qubits)
@@ -123,20 +138,27 @@ class Noisy_varqite_qiskit_tfim:
         g_array = [g for i in range(self._num_qubits)]
 
         H = SparsePauliOp(
-            ZZ_string_array + X_string_array,coeffs = J_array + g_array
+            ZZ_string_array + X_string_array, coeffs = J_array + g_array
         )
 
         return H
 
 
     def set_aux_ops(
-        self
+        self,
+        BC: str
     ) -> List["SparsePauliOp"]:
         """
         Generates a list of auxilary operators.
         Auxilary operators are generated to copmute their expectation values
         and, using the expectation values, to extract the Binder cumulant.
         The Hamiltonian itself is not added as an auxilary operator here.
+
+        Parameters
+        ----------
+        BC : periodic
+            Boundary conditions.
+            Relevant options: "periodic", "open".
 
         Returns
         -------
@@ -148,10 +170,21 @@ class Noisy_varqite_qiskit_tfim:
             mag4 : "SparsePauliOp"
                 total magnetization density to the 4th power
         """
-        ZZ_string_array = [
-            "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
-            for i in range(self._num_qubits-1)
-        ]
+        if BC == "open":
+            ZZ_string_array = [
+                "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+                for i in range(self._num_qubits-1)
+            ]
+        elif BC == "periodic":
+            ZZ_string_array = [
+                "I"*i+"ZZ"+"I"*(self._num_qubits-2-i)
+                for i in range(self._num_qubits-1)
+            ] + ["Z"+"I"*(self._num_qubits-2)+"Z"]
+        else:
+            raise ValueError(
+                "Not supported boundary conditions. "
+                "Possible options: 'periodic', 'open'."
+            )
         Z_string_array = [
             "I"*i+"Z"+"I"*(self._num_qubits-1-i)
             for i in range(self._num_qubits)
@@ -160,7 +193,7 @@ class Noisy_varqite_qiskit_tfim:
 
         ZZ = SparsePauliOp(
             ZZ_string_array,
-            coeffs = [1/(self._num_qubits-1) for i in range(self._num_qubits-1)]
+            coeffs = [1/self._num_qubits for i in range(self._num_qubits)]
         )
         mag = SparsePauliOp(Z_string_array, coeffs = mag_coef_array)
         mag2 =  mag.power(2).simplify()
@@ -172,9 +205,8 @@ class Noisy_varqite_qiskit_tfim:
     def set_ansatz(
         self,
         ansatz_type: str = "adaptvqite",
-        EfficientSU2_reps: int = 1,
-        **kwargs
-    ) -> Union["QuantumCircuit", "EfficientSU2"]:
+        EfficientSU2_reps: Optional[int] = None
+    ):
         """
         Generates a parameterized ansatz circuit.
 
@@ -183,38 +215,66 @@ class Noisy_varqite_qiskit_tfim:
         ansatz_type : str
             Type of ansatz.
             Relevant options: "adaptvqite", "EfficientSU2".
+        EfficientSU2_reps : Optional[Int]
+            Number of reps in the "EfficientSU2" ansatz.
+            If ansatz_type="adaptvqite", then EfficientSU2_reps should be None.
 
         Returns
         -------
         ansatz : Union["QuantumCircuit", "EfficientSU2"]
             Parameterized ansatz circuit.
-
+        init_param_values_dict : Dict[float64]
+            Parameters (angles) of the ansatz.
+            If ansatz_type="EfficientSU2", ansatz parameters are chosen to be
+            a constant value of np.pi/2.
         """
         if ansatz_type == "adaptvqite":
-            filename = "ansatz_example.h5"
-            ansatz_adaptvqite, ref_state_adaptvqite = self.read_adaptvqite_ansatz(filename)
+            filename = "adaptvqite_ansatz/ansatz"+self.filename+".h5"
+            (ansatz_adaptvqite,
+             params_ansatz,
+             ref_state_adaptvqite) = self.read_adaptvqite_ansatz(filename)
 
-            if ref_state_adaptvqite == [1.+0.j]+[0.+0.j for i in range(len(ref_state_adaptvqite)-1)]:
+            if (ref_state_adaptvqite ==
+                [1.+0.j]+[0.+0.j for i in range(len(ref_state_adaptvqite)-1)]):
                 ansatz = QuantumCircuit(self._num_qubits)
-            elif ref_state_adaptvqite == [0.+0.j for i in range(len(ref_state_adaptvqite)-1)]+[1.+0.j]:
+            # applying bit-flip if initial state is |11...1>
+            elif (ref_state_adaptvqite ==
+                [0.+0.j for i in range(len(ref_state_adaptvqite)-1)]+[1.+0.j]):
                 ansatz = QuantumCircuit(self._num_qubits)
                 ansatz.x([i for i in range(self._num_qubits)])
             else:
-                raise ImportError('Reference state is assumed to be either |00...0> or |11...1> here.')
-
+                raise ImportError(
+                    "Reference state is assumed to be either |00...0> or "
+                    "|11...1> here."
+                )
+            "setting the ansatz"
             for i, pauli_string_bytes in enumerate(ansatz_adaptvqite):
-
-                pauli_string = ansatz_adaptvqite[i].decode("utf-8")
-
+                pauli_string = pauli_string_bytes.decode("utf-8")
                 theta = Parameter("theta%s" % i)
-
-                ansatz.append(self.pauli_rotation_gate(theta, pauli_string), range(self._num_qubits))
-
+                ansatz.append(
+                    self.pauli_rotation_gate(theta, pauli_string),
+                    range(self._num_qubits)
+                )
+            "setting the dictionary of initial parameter values"
+            init_param_values_dict = {}
+            for i in range(len(ansatz.parameters)):
+                param_idx_sorted_alphabetically = int(
+                    sorted([str(j) for j in range(len(ansatz.parameters))])[i]
+                )    # to follow qiskit notation
+                init_param_values_dict[ansatz.parameters[i]] = params_ansatz[
+                    param_idx_sorted_alphabetically
+                ]
         elif ansatz_type == "EfficientSU2":
-            ansatz = EfficientSU2(self._num_qubits, reps=1)
+            ansatz = EfficientSU2(self._num_qubits, reps = EfficientSU2_reps)
+            init_param_values_dict = {}
+            for i in range(len(ansatz.parameters)):
+                init_param_values_dict[ansatz.parameters[i]] = np.pi/2
         else:
-            raise ValueError("Not supported ansatz type type. Relevant options: 'adaptvqite', 'EfficientSU2'")
-        return ansatz
+            raise ValueError(
+                "Not supported ansatz type. Possible options: 'adaptvqite', "
+                "'EfficientSU2'."
+            )
+        return ansatz, init_param_values_dict
 
 
     def read_adaptvqite_ansatz(
@@ -234,6 +294,8 @@ class Noisy_varqite_qiskit_tfim:
         -------
         ansatz_adaptvqite : List[bytes]
             List of byte strings representing Pauli strings entering the ansatz.
+        params_adaptvqite : List[float64]
+            Parameters (angles) of the ansatz.
         ref_state_adaptvqite : List[complex128]
             Normalized reference state.
         """
@@ -243,10 +305,10 @@ class Noisy_varqite_qiskit_tfim:
         with h5py.File(filename, "r") as f:
             ansatz_adaptvqite = list(f['ansatz_code'])
             # ngates_adaptvqite = f['ngates'][()]
-            # params_adaptvqite = f['params'][()]
+            params_adaptvqite = list(f['params'])
             ref_state_adaptvqite = list(f['ref_state'])
 
-        return ansatz_adaptvqite, ref_state_adaptvqite
+        return ansatz_adaptvqite, params_adaptvqite, ref_state_adaptvqite
 
 
     def pauli_rotation_gate(
@@ -267,45 +329,29 @@ class Noisy_varqite_qiskit_tfim:
         gate : Qiskit instruction
         """
         operator = SparsePauliOp(pauli_string)
-        gate = PauliEvolutionGate(operator, time = theta)
+        gate = PauliEvolutionGate(operator, time = theta/2)
         return gate
-
-
-    def set_init_params(
-        self,
-        ansatz,
-        init_param_values_const: float = np.pi / 2
-    ) -> dict["ParameterVectorElement",float]:
-        """
-        Generates a dictionary of initial parameter values for the ansatz
-        circuit.
-        Here for simplicity all initial parameter values are assumed to be
-        the same.
-
-        Parameters
-        ----------
-        ansatz : "QuantumCircuit" or "EfficientSU2"
-            Parameterized ansatz circuit.
-        init_param_values_const : float
-            Initial parameter values, assumed to be the same here.
-
-        Returns
-        -------
-        init_param_values : dict["ParameterVectorElement", float]
-            Dictionary of initial parameter values for the ansatz circuit.
-        """
-        init_param_values = {}
-        for i in range(len(ansatz.parameters)):
-            init_param_values[ansatz.parameters[i]] = init_param_values_const
-        return init_param_values
-
 
     def set_noise_model(
         self,
         noise_type: Optional[str],
         p: Optional[float]
     ) -> "NoiseModel":
+        """
+        Generates a noise model for a Qiksit estimator.
 
+        Parameters
+        ----------
+        noise_type : Optional[str]
+            Noise type.
+            Relevant options: "X", "depolarizing" or None.
+        p : Optional[float]
+            Noise strength (error probability) 1>p>=0.
+
+        Returns
+        -------
+        noise_model : "qiskit_aer.noise.noise_model.NoiseModel"
+        """
         if noise_type == None:
             noise_model = None
         else:
@@ -334,18 +380,36 @@ class Noisy_varqite_qiskit_tfim:
         shots: Optional[int],
     ) -> "Estimator":
         """
-        Returns estimator
+        Generates an (in general) noisy Qiskit estimator for VarQITE.
+        The estimator uses Qiskit Aer Simulator under the hood.
 
         Parameters
         ----------
-        estimator_method: str
-            Method for Qiskit Aer Simulator used in the Estimator
-            Relevant options: "density_matrix", "statevector"
+        estimator_type : str
+            Relevant options: "noiseless" of "noisy".
+        noise_model : "qiskit_aer.noise.noise_model.NoiseModel"
+            Qiskit Aer noise model
+        estimator_approximation : bool
+            Flag whether to use an approximation for the estimator.
+            If True, it calculates expectation values with normal distribution
+            approximation.
+            If False, then the actiual measuement shots are taken and the shot
+            noise is included (note that the number of shots has to be
+            specified in this case).
+        estimator_method : str
+            Method for Qiskit Aer Simulator used in the Estimator.
+            Relevant options: "density_matrix", "statevector".
+        shots : Optional[int]
+            Number of measurement shots to be used in the estimator.
+            Needs to be specified only if estimator_approximation = False.
+
+        Returns
+        -------
+        estimator : "qiskit.primitives.estimator.Estimator"
         """
         if estimator_type == "noiseless":
             estimator = QiskitEstimator()
         if estimator_type == "noisy":
-
             if estimator_approximation == True:
                 estimator = AerEstimator(
                 backend_options={
@@ -369,7 +433,10 @@ class Noisy_varqite_qiskit_tfim:
     def qiskit_varqite(
         self,
         g: float,
+        BC: str,
         time: float,
+        ansatz_type: str = "adaptvqite",
+        EfficientSU2_reps: Optional[int] = None,
         estimator_type: str = "noiseless",
         noise_type: Optional[str] = None,
         p: Optional[float] = None,
@@ -379,6 +446,65 @@ class Noisy_varqite_qiskit_tfim:
         RevQGTFlag: bool = False,
         RevEstGradFlag: bool = False
     ) -> "VarQTEResult":
+        """
+        Performs an (in general) noisy VarQITE simulation using Qiskit.
+
+        Parameters
+        ----------
+        g : float
+            Transverse field value.
+        BC : str
+            Boundary conditions for the TFIM.
+        time : float
+            Total VarQITE simulation time.
+        ansatz_type : str
+            Relevant options: "adaptvqite" or "EfficientSU2".
+        EfficientSU2_reps : Optional[Int]
+            Number of reps in the "EfficientSU2" ansatz.
+            If ansatz_type="adaptvqite", then EfficientSU2_reps should be None.
+        estimator_type : str
+            Relevant options: "noiseless" of "noisy".
+        noise_model : "qiskit_aer.noise.noise_model.NoiseModel"
+            Qiskit Aer noise model
+        p : Optional[float]
+            Noise strength (error probability) 1>p>=0.
+        estimator_approximation : bool
+            Flag whether to use an approximation for the estimator.
+            If True, it calculates expectation values with normal distribution
+            approximation.
+            If False, then the actiual measuement shots are taken and the shot
+            noise is included (note that the number of shots has to be
+            specified in this case).
+        estimator_method : str
+            Method for Qiskit Aer Simulator used in the Estimator.
+            Relevant options: "density_matrix", "statevector".
+        shots : Optional[int]
+            Number of measurement shots to be used in the estimator.
+            Needs to be specified only if estimator_approximation = False.
+        RevQGTFlag : bool
+            Flag whether to use classical ReverseQGT implementation of QGT.
+            ReverseQGT implementation is based on statevector manipulations and
+            scales exponentially with the number of qubits.
+            However, for small system sizes it can be very fast compared to
+            circuit-based gradients.
+            For more, see "https://docs.quantum.ibm.com/api/qiskit/0.45/qiskit.\
+                            algorithms.gradients.ReverseQGT"
+        RevEstGradFlag : bool
+            Flag whether to use classical ReverseEstimatorGradient
+            calculation of the expectation gradients.
+            ReverseEstimatorGradient implementation is based on statevector
+            manipulations and scales exponentially with the number of qubits.
+            However, for small system sizes it can be very fast compared to
+            circuit-based gradients.
+            For more, see "https://qiskit-community.github.io/qiskit-algorithms\
+            /stubs/qiskit_algorithms.gradients.ReverseEstimatorGradient.html"
+
+        Returns
+        -------
+        evolution_result : "qiskit_algorithms.time_evolvers.variational.\
+                            var_qte_result.VarQTEResult"
+            Evolution result object.
+        """
         if estimator_type == "noiseless" and (noise_type != None or
                                               p != None or
                                               shots != None or
@@ -390,7 +516,7 @@ class Noisy_varqite_qiskit_tfim:
                 "For a noiseless estimator noise_type, p, "
                 "estimator_approximation, estimator_method, and shots have to "
                 "be None type."
-                )
+            )
         if estimator_type == "noisy" and (noise_type == None or
                                           p == None or
                                           estimator_approximation == None or
@@ -400,18 +526,29 @@ class Noisy_varqite_qiskit_tfim:
                 "For a noisy estimator noise_type, p, "
                 "estimator_approximation, and estimator_method have to be "
                 "non-None type."
-                )
+            )
         if estimator_approximation == False and shots == None:
             raise ValueError(
                 "If estimator_approximation == False, then the number of shots "
                 "has to be integer."
-                )
+            )
+        if ansatz_type == "adaptvqite" and EfficientSU2_reps != None:
+            raise ValueError(
+                "For adaptvqite ansatz the number of reps should be None."
+            )
+        if ansatz_type == "EfficientSU2" and EfficientSU2_reps == None:
+            raise ValueError(
+                "For EfficientSU2 ansatz the number of reps should be "
+                "specified."
+            )
 
-        self.H = self.set_tfim_H(g)
-        self.aux_ops = self.set_aux_ops() + [self.H]
-        self.ansatz = self.set_ansatz(ansatz_type = "adaptvqite")
-        self.init_param_values = self.set_init_params(self.ansatz)
-
+        self.H = self.set_tfim_H(g, BC)
+        self.aux_ops = self.set_aux_ops(BC) + [self.H]
+        self.filename = "N%sg%s" % (self._num_qubits, g)
+        self.ansatz, self.init_param_values = self.set_ansatz(
+            ansatz_type,
+            EfficientSU2_reps
+        )
         evolution_problem = TimeEvolutionProblem(
             self.H,
             time,
@@ -446,21 +583,51 @@ class Noisy_varqite_qiskit_tfim:
     def qiskit_ite(
         self,
         g: float,
+        BC: str,
         time: float,
-        time_step: float
+        ansatz_type: str = "adaptvqite",
+        EfficientSU2_reps: Optional[int] = None,
+        time_step: float = 0.01
     ) -> "TimeEvolutionResult":
-        self.H = self.set_tfim_H(g)
-        self.aux_ops = self.set_aux_ops() + [self.H]
-        self.ansatz = self.set_ansatz()
-        self.init_param_values = self.set_init_params(self.ansatz)
+        """
+        Performs a noiseless Trotterized ITE simulation using Qiskit
+        SciPyImaginaryEvolver.
 
-        init_state = Statevector(
+        Parameters
+        ----------
+        g : float
+            Transverse field value.
+        BC : str
+            Boundary conditions for the TFIM.
+        time : float
+            Total VarQITE simulation time.
+        ansatz_type : str
+            Relevant options: "adaptvqite" or "EfficientSU2".
+        EfficientSU2_reps : Optional[Int]
+            Number of reps in the "EfficientSU2" ansatz.
+        time_step : float
+            Time step of the Trotterized ITE evolution.
+
+        Returns
+        -------
+        sol : "qiskit_algorithms.time_evolvers.time_evolution_result.\
+                TimeEvolutionResult"
+            Evolution result object.
+        """
+        self.H = self.set_tfim_H(g, BC)
+        self.aux_ops = self.set_aux_ops(BC) + [self.H]
+        self.filename = "N%sg%s" % (self._num_qubits, g)
+        self.ansatz, self.init_param_values = self.set_ansatz(
+            ansatz_type,
+            EfficientSU2_reps
+        )
+        self.init_state = Statevector(
             self.ansatz.assign_parameters(self.init_param_values)
         )
         evolution_problem = TimeEvolutionProblem(
             self.H,
             time,
-            initial_state = init_state,
+            initial_state = self.init_state,
             aux_operators = self.aux_ops
         )
         evol = SciPyImaginaryEvolver(num_timesteps=int(time/time_step))
