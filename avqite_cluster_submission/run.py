@@ -84,6 +84,6 @@ if m_rank == 0:
     for i in range(args.gsdegeneracy):
         fidelity += abs(vec.dot(v[i].data.as_ndarray().conj()))**2
     print("fidelity =", fidelity, flush=True)
-    ans.psave_ansatz_simp()
+    # ans.psave_ansatz_simp()
     ans.psave_ansatz_inp()
-    ans.save_ansatz()
+    # ans.save_ansatz()
