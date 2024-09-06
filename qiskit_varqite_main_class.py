@@ -30,7 +30,7 @@ qiskit-algorithms version = 0.3.0
 """
 
 import numpy as np
-import h5py
+import pickle
 from typing import (
     List,
     Optional,
@@ -229,17 +229,16 @@ class Noisy_varqite_qiskit_tfim:
             a constant value of np.pi/2.
         """
         if ansatz_type == "adaptvqite":
-            filename = "adaptvqite_ansatz/ansatz"+self.filename+".h5"
+            filename = "adaptvqite_ansatz/ansatz_inp"+self.filename+".pkle"
             (ansatz_adaptvqite,
-             params_ansatz,
-             ref_state_adaptvqite) = self.read_adaptvqite_ansatz(filename)
-
-            if (ref_state_adaptvqite ==
-                [1.+0.j]+[0.+0.j for i in range(len(ref_state_adaptvqite)-1)]):
+             params_ansatz) = self.read_adaptvqite_ansatz(filename)
+            #opening incar file to read out the reference state
+            with open("incars/incar"+self.filename) as fp:
+                incar_content = fp.read()
+            if incar_content[-(3+self._num_qubits):-3] == "0"*self._num_qubits:
                 ansatz = QuantumCircuit(self._num_qubits)
             # applying bit-flip if initial state is |11...1>
-            elif (ref_state_adaptvqite ==
-                [0.+0.j for i in range(len(ref_state_adaptvqite)-1)]+[1.+0.j]):
+            elif incar_content[-(3+self._num_qubits):-3] == "1"*self._num_qubits:
                 ansatz = QuantumCircuit(self._num_qubits)
                 ansatz.x([i for i in range(self._num_qubits)])
             else:
@@ -247,9 +246,9 @@ class Noisy_varqite_qiskit_tfim:
                     "Reference state is assumed to be either |00...0> or "
                     "|11...1> here."
                 )
+
             "setting the ansatz"
-            for i, pauli_string_bytes in enumerate(ansatz_adaptvqite):
-                pauli_string = pauli_string_bytes.decode("utf-8")
+            for i, pauli_string in enumerate(ansatz_adaptvqite):
                 theta = Parameter("theta%s" % i)
                 ansatz.append(
                     self.pauli_rotation_gate(theta, pauli_string),
@@ -288,27 +287,24 @@ class Noisy_varqite_qiskit_tfim:
         ----------
         filename : str
             Name of a file containing the results of adaptvqite calculation.
-            Has to be given in .h5 format.
+            Has to be given in .pkle format.
 
         Returns
         -------
-        ansatz_adaptvqite : List[bytes]
-            List of byte strings representing Pauli strings entering the ansatz.
+        ansatz_adaptvqite : List[str]
+            List of Pauli strings entering the ansatz.
         params_adaptvqite : List[float64]
             Parameters (angles) of the ansatz.
-        ref_state_adaptvqite : List[complex128]
-            Normalized reference state.
         """
-        if filename[-3:] != '.h5':
-            raise ImportError("Ansatz file should be given in .h5 format")
+        if filename[-5:] != '.pkle':
+            raise ImportError("Ansatz file should be given in .pkle format")
 
-        with h5py.File(filename, "r") as f:
-            ansatz_adaptvqite = list(f['ansatz_code'])
-            # ngates_adaptvqite = f['ngates'][()]
-            params_adaptvqite = list(f['params'])
-            ref_state_adaptvqite = list(f['ref_state'])
+        with open(filename, 'rb') as inp:
+            data_inp = pickle.load(inp)
+            ansatz_adaptvqite = data_inp[0]
+            params_adaptvqite = data_inp[1]
 
-        return ansatz_adaptvqite, params_adaptvqite, ref_state_adaptvqite
+        return ansatz_adaptvqite, params_adaptvqite
 
 
     def pauli_rotation_gate(
